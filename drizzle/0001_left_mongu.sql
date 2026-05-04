@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "task_completions_task_user_unique" ON "task_completions" USING btree ("task_id","user_id");
