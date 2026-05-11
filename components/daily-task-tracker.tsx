@@ -2,6 +2,8 @@
 
 import {
   PointerEvent,
+  MouseEvent,
+  KeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -30,6 +32,8 @@ type DayGroup = {
   day: number;
   tasks: DailyTask[];
 };
+
+const isDevelopment = process.env.NODE_ENV === "development";
 
 function formatTaskType(taskType: DailyTask["taskType"]) {
   const labels: Record<DailyTask["taskType"], string> = {
@@ -233,6 +237,32 @@ export function DailyTaskTracker() {
     centerDay(nextGroup.day);
   };
 
+  const protectTaskControl = (
+    event: PointerEvent<HTMLElement> | MouseEvent<HTMLElement>,
+  ) => {
+    event.stopPropagation();
+  };
+
+  const protectKeyboardTaskControl = (event: KeyboardEvent<HTMLElement>) => {
+    event.stopPropagation();
+  };
+
+  const updateTaskFromButton = (
+    taskId: string,
+    status: DailyTask["status"],
+    actionType: "mark_done" | "reopen" | "set_aside" | "bring_back",
+  ) => {
+    if (isDevelopment) {
+      console.info("[tracker-task]", {
+        event: "button_click_received",
+        taskId,
+        actionType,
+      });
+    }
+
+    void updateTaskStatus(taskId, status);
+  };
+
   const returnToToday = () => {
     if (!currentPlanDay) {
       return;
@@ -394,7 +424,13 @@ export function DailyTaskTracker() {
       <div
         ref={carouselRef}
         className="flex cursor-grab snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-[calc((100%-min(92vw,560px))/2)] py-4 active:cursor-grabbing"
-        onPointerDown={onPointerDown}
+        onPointerDown={(event) => {
+          if ((event.target as HTMLElement).closest("[data-task-control='true']")) {
+            return;
+          }
+
+          onPointerDown(event);
+        }}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
@@ -506,11 +542,19 @@ export function DailyTaskTracker() {
                         <div className="flex flex-col gap-3 sm:flex-row">
                           <Button
                             type="button"
+                            data-task-control="true"
                             className="w-full sm:w-fit"
                             variant={isComplete ? "outline" : "default"}
-                            onClick={() =>
-                              updateTaskStatus(task.id, isComplete ? "pending" : "complete")
-                            }
+                            onPointerDown={protectTaskControl}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              updateTaskFromButton(
+                                task.id,
+                                isComplete ? "pending" : "complete",
+                                isComplete ? "reopen" : "mark_done",
+                              );
+                            }}
+                            onKeyDown={protectKeyboardTaskControl}
                           >
                             {isComplete ? (
                               <>
@@ -526,11 +570,19 @@ export function DailyTaskTracker() {
                           </Button>
                           <Button
                             type="button"
+                            data-task-control="true"
                             className="w-full sm:w-fit"
                             variant="ghost"
-                            onClick={() =>
-                              updateTaskStatus(task.id, isSkipped ? "pending" : "skipped")
-                            }
+                            onPointerDown={protectTaskControl}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              updateTaskFromButton(
+                                task.id,
+                                isSkipped ? "pending" : "skipped",
+                                isSkipped ? "bring_back" : "set_aside",
+                              );
+                            }}
+                            onKeyDown={protectKeyboardTaskControl}
                           >
                             {isSkipped ? (
                               <>

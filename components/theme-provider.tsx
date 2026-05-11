@@ -16,10 +16,6 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-function applyAccentTheme(theme: AccentThemeId) {
-  document.documentElement.dataset.accentTheme = theme;
-}
-
 function readStoredAccentTheme() {
   if (typeof window === "undefined") {
     return defaultAccentThemeId;
@@ -35,12 +31,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const storedTheme = readStoredAccentTheme();
     setAccentThemeState(storedTheme);
-    applyAccentTheme(storedTheme);
   }, []);
 
   const setAccentTheme = (theme: AccentThemeId) => {
     setAccentThemeState(theme);
-    applyAccentTheme(theme);
     window.localStorage.setItem(ACCENT_THEME_STORAGE_KEY, theme);
   };
 
@@ -52,7 +46,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [accentTheme],
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>
+      <div data-accent-theme={accentTheme} className="min-h-screen">
+        {children}
+      </div>
+    </ThemeContext.Provider>
+  );
 }
 
 export function useAccentTheme() {

@@ -31,37 +31,37 @@
     --shadow-card: 0 24px 70px -48px rgb(31 41 55 / 0.42);
   }
 
-  :root[data-accent-theme="blossom"] {
+  [data-accent-theme="blossom"] {
     --primary: 335 77% 88%;
     --ring: 335 77% 76%;
     --surface-tint: 335 77% 96%;
   }
 
-  :root[data-accent-theme="mist"] {
+  [data-accent-theme="mist"] {
     --primary: 200 82% 83%;
     --ring: 200 82% 70%;
     --surface-tint: 200 82% 95%;
   }
 
-  :root[data-accent-theme="sage"] {
+  [data-accent-theme="sage"] {
     --primary: 132 48% 81%;
     --ring: 132 48% 66%;
     --surface-tint: 132 48% 94%;
   }
 
-  :root[data-accent-theme="dawn"] {
+  [data-accent-theme="dawn"] {
     --primary: 50 100% 85%;
     --ring: 50 100% 68%;
     --surface-tint: 50 100% 94%;
   }
 
-  :root[data-accent-theme="lavender"] {
+  [data-accent-theme="lavender"] {
     --primary: 262 70% 87%;
     --ring: 262 70% 74%;
     --surface-tint: 262 70% 96%;
   }
 
-  :root[data-accent-theme="peach"] {
+  [data-accent-theme="peach"] {
     --primary: 33 100% 82%;
     --ring: 33 100% 68%;
     --surface-tint: 33 100% 94%;

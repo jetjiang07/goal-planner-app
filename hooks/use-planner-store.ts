@@ -24,6 +24,7 @@ const PLAN_CREATED_AT_KEY = "goal-planner:plan-created-at";
 const PLAN_START_DATE_KEY = "goal-planner:plan-start-date";
 const GUEST_STORAGE_OWNER = "guest";
 const TASK_SAVE_ERROR_MESSAGE = "We couldn't save this step just now. Please try again.";
+const isDevelopment = process.env.NODE_ENV === "development";
 
 const defaultIntake: GoalIntake = {
   goal: "",
@@ -412,6 +413,13 @@ export function usePlannerStore() {
   const updateTaskStatus = async (taskId: string, status: DailyTask["status"]) => {
     const previousPlan = plan;
     setTaskUpdateError(null);
+    if (isDevelopment) {
+      console.info("[tracker-task]", {
+        event: "api_call_started",
+        taskId,
+        status,
+      });
+    }
     const statusUpdatedPlan = {
       ...plan,
       dailyTasks: plan.dailyTasks.map((task) =>
@@ -445,10 +453,24 @@ export function usePlannerStore() {
       if (!response.ok) {
         throw new Error("Task completion update failed.");
       }
+      if (isDevelopment) {
+        console.info("[tracker-task]", {
+          event: "api_call_succeeded",
+          taskId,
+          status,
+        });
+      }
     } catch (error) {
       setPlanState(previousPlan);
       writeStorage(PLAN_KEY, previousPlan, storageOwner);
       setTaskUpdateError(TASK_SAVE_ERROR_MESSAGE);
+      if (isDevelopment) {
+        console.info("[tracker-task]", {
+          event: "api_call_failed",
+          taskId,
+          status,
+        });
+      }
       console.error(error);
     }
   };
