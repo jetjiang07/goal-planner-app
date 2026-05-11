@@ -96,6 +96,28 @@ function getSafeDbError(error: unknown) {
   };
 }
 
+export function getSafePersistenceError(error: unknown) {
+  return getSafeDbError(error);
+}
+
+export async function getTaskOwnershipInfo(
+  input: { taskId: string },
+  db: DbClient = getDb(),
+) {
+  const [row] = await db
+    .select({
+      taskId: dailyTasks.id,
+      planId: dailyTasks.planId,
+      planUserId: plans.userId,
+    })
+    .from(dailyTasks)
+    .innerJoin(plans, eq(dailyTasks.planId, plans.id))
+    .where(eq(dailyTasks.id, input.taskId))
+    .limit(1);
+
+  return row ?? null;
+}
+
 async function assertTaskBelongsToUser(
   input: { planId: string; userId: string },
   db: DbClient,

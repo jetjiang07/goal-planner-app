@@ -27,3 +27,12 @@ export async function getAuthenticatedAppUserId() {
 
   return userId ? mapClerkUserIdToAppUserId(userId) : null;
 }
+
+export async function getAuthenticatedUserIds() {
+  const { userId: clerkUserId } = await auth();
+
+  return {
+    clerkUserId,
+    appUserId: clerkUserId ? mapClerkUserIdToAppUserId(clerkUserId) : null,
+  };
+}

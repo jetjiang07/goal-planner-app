@@ -23,6 +23,7 @@ const USER_ID_KEY = "goal-planner:user-id";
 const PLAN_CREATED_AT_KEY = "goal-planner:plan-created-at";
 const PLAN_START_DATE_KEY = "goal-planner:plan-start-date";
 const GUEST_STORAGE_OWNER = "guest";
+const TASK_SAVE_ERROR_MESSAGE = "We couldn't save this step just now. Please try again.";
 
 const defaultIntake: GoalIntake = {
   goal: "",
@@ -279,6 +280,7 @@ export function usePlannerStore() {
   const [userId, setUserIdState] = useState(ANONYMOUS_USER_ID);
   const [planCreatedAt, setPlanCreatedAtState] = useState<string | null>(null);
   const [planStartDate, setPlanStartDateState] = useState<string | null>(null);
+  const [taskUpdateError, setTaskUpdateError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -409,6 +411,7 @@ export function usePlannerStore() {
 
   const updateTaskStatus = async (taskId: string, status: DailyTask["status"]) => {
     const previousPlan = plan;
+    setTaskUpdateError(null);
     const statusUpdatedPlan = {
       ...plan,
       dailyTasks: plan.dailyTasks.map((task) =>
@@ -435,7 +438,6 @@ export function usePlannerStore() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId,
           status,
         }),
       });
@@ -446,6 +448,7 @@ export function usePlannerStore() {
     } catch (error) {
       setPlanState(previousPlan);
       writeStorage(PLAN_KEY, previousPlan, storageOwner);
+      setTaskUpdateError(TASK_SAVE_ERROR_MESSAGE);
       console.error(error);
     }
   };
@@ -471,6 +474,7 @@ export function usePlannerStore() {
     progressFeedback,
     setAnswers,
     setIntake,
+    taskUpdateError,
     updateTaskStatus,
   };
 }

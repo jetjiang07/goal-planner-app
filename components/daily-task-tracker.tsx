@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import {
+  AlertCircle,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -136,7 +137,14 @@ function getGentleCopy(day: number, currentPlanDay: number | null, allDone: bool
 }
 
 export function DailyTaskTracker() {
-  const { plan, planCreatedAt, planId, planStartDate, updateTaskStatus } = usePlannerStore();
+  const {
+    plan,
+    planCreatedAt,
+    planId,
+    planStartDate,
+    taskUpdateError,
+    updateTaskStatus,
+  } = usePlannerStore();
   const carouselRef = useRef<HTMLDivElement | null>(null);
   const hasInitializedCarouselRef = useRef(false);
   const lastInitializedPlanKeyRef = useRef<string | null>(null);
@@ -546,6 +554,15 @@ export function DailyTaskTracker() {
           );
         })}
       </div>
+      {taskUpdateError ? (
+        <div
+          className="flex gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive"
+          role="alert"
+        >
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>{taskUpdateError}</p>
+        </div>
+      ) : null}
     </div>
   );
 }

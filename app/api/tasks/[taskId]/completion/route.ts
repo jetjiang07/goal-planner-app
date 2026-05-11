@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { getAuthenticatedAppUserId } from "@/lib/auth";
+import { getAuthenticatedUserIds } from "@/lib/auth";
 import {
   ensureAnonymousUser,
+  getSafePersistenceError,
+  getTaskOwnershipInfo,
   recordTaskCompletion,
   resetTaskCompletion,
 } from "@/lib/db/persistence";
@@ -37,20 +39,41 @@ function logTaskCompletionError(error: unknown, context: Record<string, unknown>
   });
 }
 
+function logTaskCompletionStep(step: string, metadata?: Record<string, unknown>) {
+  console.error("[task-completion]", {
+    step,
+    ...metadata,
+  });
+}
+
 export async function POST(request: Request, context: RouteContext) {
   const { taskId } = await context.params;
   const payload = (await request.json().catch(() => null)) as {
-    userId?: string;
     status?: unknown;
   } | null;
 
+  logTaskCompletionStep("request_received", {
+    taskId,
+    hasStatus: payload?.status !== undefined,
+  });
+
   if (!isTaskStatus(payload?.status)) {
+    logTaskCompletionStep("invalid_status", {
+      taskId,
+      status: payload?.status,
+    });
     return NextResponse.json({ error: "Invalid task status." }, { status: 400 });
   }
 
-  const userId = await getAuthenticatedAppUserId();
+  const { clerkUserId, appUserId } = await getAuthenticatedUserIds();
 
-  if (!userId) {
+  logTaskCompletionStep("auth_checked", {
+    hasClerkUserId: Boolean(clerkUserId),
+    mappedUserId: appUserId,
+    taskId,
+  });
+
+  if (!appUserId) {
     return NextResponse.json(
       { error: "Sign in to save task progress." },
       { status: 401 },
@@ -58,16 +81,44 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   try {
-    await ensureAnonymousUser({ userId });
+    await ensureAnonymousUser({ userId: appUserId });
+
+    const ownership = await getTaskOwnershipInfo({ taskId });
+    const ownershipPassed = ownership?.planUserId === appUserId;
+
+    logTaskCompletionStep("ownership_checked", {
+      taskId,
+      mappedUserId: appUserId,
+      taskFound: Boolean(ownership),
+      planId: ownership?.planId,
+      ownershipPassed,
+    });
+
+    if (!ownershipPassed) {
+      return NextResponse.json(
+        { error: "We could not save that task update. Please try again." },
+        { status: 404 },
+      );
+    }
 
     if (payload.status === "pending") {
-      const task = await resetTaskCompletion({ taskId, userId });
+      const task = await resetTaskCompletion({ taskId, userId: appUserId });
+      logTaskCompletionStep("completion_reset", {
+        taskId,
+        mappedUserId: appUserId,
+      });
       return NextResponse.json({ task });
     }
 
     const result = await recordTaskCompletion({
       taskId,
-      userId,
+      userId: appUserId,
+      status: payload.status,
+    });
+
+    logTaskCompletionStep("completion_recorded", {
+      taskId,
+      mappedUserId: appUserId,
       status: payload.status,
     });
 
@@ -75,8 +126,9 @@ export async function POST(request: Request, context: RouteContext) {
   } catch (error) {
     logTaskCompletionError(error, {
       taskId,
-      userId,
+      mappedUserId: appUserId,
       status: payload.status,
+      dbError: getSafePersistenceError(error),
     });
     return NextResponse.json(
       { error: "We could not save that task update. Please try again." },
