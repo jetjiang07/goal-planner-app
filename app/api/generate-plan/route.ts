@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { ANONYMOUS_USER_ID } from "@/lib/anonymous-user";
+import { getAuthenticatedAppUserId } from "@/lib/auth";
 import {
   createGoal,
   ensureAnonymousUser,
+  getGoalForUser,
   getPersistedPlanById,
   persistGeneratedPlan,
 } from "@/lib/db/persistence";
@@ -384,7 +385,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: FRIENDLY_ERROR_MESSAGE }, { status: 400 });
     }
 
-    const userId = payload.userId ?? ANONYMOUS_USER_ID;
+    const userId = await getAuthenticatedAppUserId();
+
+    if (!userId) {
+      logGeneratePlanError("request_validation_error", "Unauthenticated plan generation request.");
+      return NextResponse.json({ error: FRIENDLY_ERROR_MESSAGE }, { status: 401 });
+    }
 
     logGeneratePlanStep("request_validated", {
       userId,
@@ -526,8 +532,11 @@ export async function POST(request: Request) {
         userId,
         existingGoalId: payload.goalId,
       });
+      const existingGoal = payload.goalId
+        ? await getGoalForUser({ goalId: payload.goalId, userId })
+        : null;
       goal =
-        payload.goalId ??
+        existingGoal?.id ??
         (
           await createGoal({
             userId,
@@ -539,7 +548,7 @@ export async function POST(request: Request) {
       logGeneratePlanStep("create_find_goal", {
         userId,
         goalId: goal,
-        created: !payload.goalId,
+        created: !existingGoal,
       });
     } catch (error) {
       logGeneratePlanError("database_insert_error", error, {
@@ -609,6 +618,8 @@ export async function POST(request: Request) {
       goalId: goal,
       planVersionId: persisted.version.id,
       userId,
+      planCreatedAt: persistedPlan.plan.createdAt.toISOString(),
+      planStartDate: null,
     };
 
     logGeneratePlanStep("return_db_backed_plan", {

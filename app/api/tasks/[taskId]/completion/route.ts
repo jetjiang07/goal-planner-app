@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { ANONYMOUS_USER_ID } from "@/lib/anonymous-user";
+import { getAuthenticatedAppUserId } from "@/lib/auth";
 import {
   ensureAnonymousUser,
   recordTaskCompletion,
@@ -48,7 +48,14 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Invalid task status." }, { status: 400 });
   }
 
-  const userId = payload.userId ?? ANONYMOUS_USER_ID;
+  const userId = await getAuthenticatedAppUserId();
+
+  if (!userId) {
+    return NextResponse.json(
+      { error: "Sign in to save task progress." },
+      { status: 401 },
+    );
+  }
 
   try {
     await ensureAnonymousUser({ userId });

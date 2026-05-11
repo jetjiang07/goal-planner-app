@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 
 import { ANONYMOUS_USER_ID } from "@/lib/anonymous-user";
 import { emptyPlan, isGeneratedPlan } from "@/lib/plan-schema";
@@ -19,6 +20,9 @@ const PLAN_KEY = "goal-planner:generated-plan";
 const PLAN_ID_KEY = "goal-planner:plan-id";
 const GOAL_ID_KEY = "goal-planner:goal-id";
 const USER_ID_KEY = "goal-planner:user-id";
+const PLAN_CREATED_AT_KEY = "goal-planner:plan-created-at";
+const PLAN_START_DATE_KEY = "goal-planner:plan-start-date";
+const GUEST_STORAGE_OWNER = "guest";
 
 const defaultIntake: GoalIntake = {
   goal: "",
@@ -46,7 +50,11 @@ type ProgressFeedback = {
   message: string;
 };
 
-function readStorage<T>(key: string, fallback: T): T {
+function getScopedStorageKey(key: string, owner: string) {
+  return `${key}:${owner}`;
+}
+
+function readRawStorage<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") {
     return fallback;
   }
@@ -59,12 +67,26 @@ function readStorage<T>(key: string, fallback: T): T {
   }
 }
 
-function writeStorage<T>(key: string, value: T) {
+function readStorage<T>(key: string, fallback: T, owner: string): T {
+  const scopedValue = readRawStorage<T | null>(getScopedStorageKey(key, owner), null);
+
+  if (scopedValue !== null) {
+    return scopedValue;
+  }
+
+  if (owner === GUEST_STORAGE_OWNER) {
+    return readRawStorage(key, fallback);
+  }
+
+  return fallback;
+}
+
+function writeStorage<T>(key: string, value: T, owner: string) {
   if (typeof window === "undefined") {
     return;
   }
 
-  window.localStorage.setItem(key, JSON.stringify(value));
+  window.localStorage.setItem(getScopedStorageKey(key, owner), JSON.stringify(value));
 }
 
 function isPersistedGeneratedPlan(value: unknown): value is PersistedGeneratedPlan {
@@ -79,6 +101,10 @@ function isPersistedGeneratedPlan(value: unknown): value is PersistedGeneratedPl
     typeof response.goalId === "string" &&
     typeof response.planVersionId === "string" &&
     typeof response.userId === "string" &&
+    typeof response.planCreatedAt === "string" &&
+    (typeof response.planStartDate === "string" ||
+      response.planStartDate === null ||
+      response.planStartDate === undefined) &&
     isGeneratedPlan(response.plan)
   );
 }
@@ -243,28 +269,48 @@ function adjustUpcomingDays(
 }
 
 export function usePlannerStore() {
+  const { isLoaded: isAuthLoaded, userId: clerkUserId } = useAuth();
+  const storageOwner = clerkUserId ? `auth:${clerkUserId}` : GUEST_STORAGE_OWNER;
   const [intake, setIntakeState] = useState<GoalIntake>(defaultIntake);
   const [answers, setAnswersState] = useState<ClarificationAnswer[]>([]);
   const [plan, setPlanState] = useState<GeneratedPlan>(emptyPlan);
   const [planId, setPlanIdState] = useState<string | null>(null);
   const [goalId, setGoalIdState] = useState<string | null>(null);
   const [userId, setUserIdState] = useState(ANONYMOUS_USER_ID);
+  const [planCreatedAt, setPlanCreatedAtState] = useState<string | null>(null);
+  const [planStartDate, setPlanStartDateState] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    const storedPlan = readStorage<unknown>(PLAN_KEY, emptyPlan);
-    const storedPlanId = readStorage<string | null>(PLAN_ID_KEY, null);
-    const storedGoalId = readStorage<string | null>(GOAL_ID_KEY, null);
-    const storedUserId = readStorage<string>(USER_ID_KEY, ANONYMOUS_USER_ID);
+    if (!isAuthLoaded) {
+      return;
+    }
 
-    setIntakeState(readStorage(INTAKE_KEY, defaultIntake));
-    setAnswersState(readStorage(ANSWERS_KEY, []));
+    const storedPlan = readStorage<unknown>(PLAN_KEY, emptyPlan, storageOwner);
+    const storedPlanId = readStorage<string | null>(PLAN_ID_KEY, null, storageOwner);
+    const storedGoalId = readStorage<string | null>(GOAL_ID_KEY, null, storageOwner);
+    const storedUserId = clerkUserId ?? readStorage<string>(USER_ID_KEY, ANONYMOUS_USER_ID, storageOwner);
+    const storedPlanCreatedAt = readStorage<string | null>(
+      PLAN_CREATED_AT_KEY,
+      null,
+      storageOwner,
+    );
+    const storedPlanStartDate = readStorage<string | null>(
+      PLAN_START_DATE_KEY,
+      null,
+      storageOwner,
+    );
+
+    setIntakeState(readStorage(INTAKE_KEY, defaultIntake, storageOwner));
+    setAnswersState(readStorage(ANSWERS_KEY, [], storageOwner));
     setPlanState(isGeneratedPlan(storedPlan) ? storedPlan : emptyPlan);
     setPlanIdState(storedPlanId);
     setGoalIdState(storedGoalId);
     setUserIdState(storedUserId);
+    setPlanCreatedAtState(storedPlanCreatedAt);
+    setPlanStartDateState(storedPlanStartDate);
     setIsReady(true);
-  }, []);
+  }, [clerkUserId, isAuthLoaded, storageOwner]);
 
   useEffect(() => {
     if (!isReady || !planId) {
@@ -289,9 +335,13 @@ export function usePlannerStore() {
       setPlanState(body.plan);
       setGoalIdState(body.goalId);
       setUserIdState(body.userId);
-      writeStorage(PLAN_KEY, body.plan);
-      writeStorage(GOAL_ID_KEY, body.goalId);
-      writeStorage(USER_ID_KEY, body.userId);
+      setPlanCreatedAtState(body.planCreatedAt);
+      setPlanStartDateState(body.planStartDate ?? null);
+      writeStorage(PLAN_KEY, body.plan, storageOwner);
+      writeStorage(GOAL_ID_KEY, body.goalId, storageOwner);
+      writeStorage(USER_ID_KEY, body.userId, storageOwner);
+      writeStorage(PLAN_CREATED_AT_KEY, body.planCreatedAt, storageOwner);
+      writeStorage(PLAN_START_DATE_KEY, body.planStartDate ?? null, storageOwner);
     }
 
     void loadPersistedPlan();
@@ -299,22 +349,22 @@ export function usePlannerStore() {
     return () => {
       isCancelled = true;
     };
-  }, [isReady, planId, userId]);
+  }, [isReady, planId, storageOwner, userId]);
 
   const setIntake = (value: GoalIntake) => {
     setIntakeState(value);
-    writeStorage(INTAKE_KEY, value);
+    writeStorage(INTAKE_KEY, value, storageOwner);
   };
 
   const setAnswers = (value: ClarificationAnswer[]) => {
     setAnswersState(value);
-    writeStorage(ANSWERS_KEY, value);
+    writeStorage(ANSWERS_KEY, value, storageOwner);
   };
 
   const generatePlan = async (latestAnswers = answers) => {
     const currentIntake = intake.goal.trim()
       ? intake
-      : readStorage(INTAKE_KEY, defaultIntake);
+      : readStorage(INTAKE_KEY, defaultIntake, storageOwner);
     const request: GeneratePlanRequest = {
       intake: currentIntake,
       answers: latestAnswers,
@@ -346,10 +396,14 @@ export function usePlannerStore() {
     setPlanIdState(generatedPlan.planId);
     setGoalIdState(generatedPlan.goalId);
     setUserIdState(generatedPlan.userId);
-    writeStorage(PLAN_KEY, generatedPlan.plan);
-    writeStorage(PLAN_ID_KEY, generatedPlan.planId);
-    writeStorage(GOAL_ID_KEY, generatedPlan.goalId);
-    writeStorage(USER_ID_KEY, generatedPlan.userId);
+    setPlanCreatedAtState(generatedPlan.planCreatedAt);
+    setPlanStartDateState(generatedPlan.planStartDate ?? null);
+    writeStorage(PLAN_KEY, generatedPlan.plan, storageOwner);
+    writeStorage(PLAN_ID_KEY, generatedPlan.planId, storageOwner);
+    writeStorage(GOAL_ID_KEY, generatedPlan.goalId, storageOwner);
+    writeStorage(USER_ID_KEY, generatedPlan.userId, storageOwner);
+    writeStorage(PLAN_CREATED_AT_KEY, generatedPlan.planCreatedAt, storageOwner);
+    writeStorage(PLAN_START_DATE_KEY, generatedPlan.planStartDate ?? null, storageOwner);
     return generatedPlan.plan;
   };
 
@@ -364,7 +418,7 @@ export function usePlannerStore() {
     const nextStats = getCompletionStats(statusUpdatedPlan.dailyTasks);
     const currentIntake = intake.goal.trim()
       ? intake
-      : readStorage(INTAKE_KEY, defaultIntake);
+      : readStorage(INTAKE_KEY, defaultIntake, storageOwner);
     const updatedPlan = adjustUpcomingDays(
       statusUpdatedPlan,
       getProgressFeedback(nextStats),
@@ -372,7 +426,7 @@ export function usePlannerStore() {
     );
 
     setPlanState(updatedPlan);
-    writeStorage(PLAN_KEY, updatedPlan);
+    writeStorage(PLAN_KEY, updatedPlan, storageOwner);
 
     try {
       const response = await fetch(`/api/tasks/${taskId}/completion`, {
@@ -391,7 +445,7 @@ export function usePlannerStore() {
       }
     } catch (error) {
       setPlanState(previousPlan);
-      writeStorage(PLAN_KEY, previousPlan);
+      writeStorage(PLAN_KEY, previousPlan, storageOwner);
       console.error(error);
     }
   };
@@ -411,7 +465,9 @@ export function usePlannerStore() {
     intake,
     isReady,
     plan,
+    planCreatedAt,
     planId,
+    planStartDate,
     progressFeedback,
     setAnswers,
     setIntake,

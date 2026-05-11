@@ -5,9 +5,9 @@ export default function PlanPage() {
   return (
     <AppShell
       currentPath="/plan"
-      eyebrow="Generated Plan"
-      title="Review the structured plan before execution."
-      description="See phases, weekly focus, daily tasks, resources, risks, and basic adjustment rules in one place."
+      eyebrow="Execution Coach"
+      title="A calmer path from goal to action."
+      description="Focus on the next useful step, the current week, and the outcomes that make progress visible."
     >
       <PlanResult />
     </AppShell>

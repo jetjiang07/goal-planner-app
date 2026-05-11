@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { ANONYMOUS_USER_ID } from "@/lib/anonymous-user";
+import { getAuthenticatedAppUserId } from "@/lib/auth";
 import { ensureAnonymousUser, getPersistedPlanById } from "@/lib/db/persistence";
 import type { PersistedGeneratedPlan } from "@/lib/types";
 
@@ -10,10 +10,13 @@ type RouteContext = {
   }>;
 };
 
-export async function GET(request: Request, context: RouteContext) {
+export async function GET(_request: Request, context: RouteContext) {
   const { planId } = await context.params;
-  const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId") ?? ANONYMOUS_USER_ID;
+  const userId = await getAuthenticatedAppUserId();
+
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in to view this plan." }, { status: 401 });
+  }
 
   await ensureAnonymousUser({ userId });
 
@@ -29,6 +32,8 @@ export async function GET(request: Request, context: RouteContext) {
     goalId: persistedPlan.plan.goalId,
     planVersionId: persistedPlan.version.id,
     userId,
+    planCreatedAt: persistedPlan.plan.createdAt.toISOString(),
+    planStartDate: null,
   };
 
   return NextResponse.json(responseBody);

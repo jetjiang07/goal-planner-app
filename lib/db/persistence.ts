@@ -96,6 +96,21 @@ function getSafeDbError(error: unknown) {
   };
 }
 
+async function assertTaskBelongsToUser(
+  input: { planId: string; userId: string },
+  db: DbClient,
+) {
+  const [plan] = await db
+    .select({ id: plans.id })
+    .from(plans)
+    .where(and(eq(plans.id, input.planId), eq(plans.userId, input.userId)))
+    .limit(1);
+
+  if (!plan) {
+    throw new Error("Task not found.");
+  }
+}
+
 export async function ensureAnonymousUser(
   input: EnsureAnonymousUserInput,
   db: DbClient = getDb(),
@@ -184,6 +199,19 @@ export async function createGoal(input: CreateGoalInput, db: DbClient = getDb())
     .returning();
 
   return goal;
+}
+
+export async function getGoalForUser(
+  input: { goalId: string; userId: string },
+  db: DbClient = getDb(),
+) {
+  const [goal] = await db
+    .select()
+    .from(goals)
+    .where(and(eq(goals.id, input.goalId), eq(goals.userId, input.userId)))
+    .limit(1);
+
+  return goal ?? null;
 }
 
 export async function persistGeneratedPlan(
@@ -376,6 +404,11 @@ export async function recordTaskCompletion(
     throw new Error("Task not found.");
   }
 
+  await assertTaskBelongsToUser(
+    { planId: previousTask.planId, userId: input.userId },
+    db,
+  );
+
   const [task] = await db
     .update(dailyTasks)
     .set({
@@ -437,6 +470,11 @@ export async function resetTaskCompletion(
   if (!previousTask) {
     throw new Error("Task not found.");
   }
+
+  await assertTaskBelongsToUser(
+    { planId: previousTask.planId, userId: input.userId },
+    db,
+  );
 
   const [task] = await db
     .update(dailyTasks)

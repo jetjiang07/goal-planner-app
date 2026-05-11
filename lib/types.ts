@@ -68,4 +68,6 @@ export type PersistedGeneratedPlan = {
   goalId: string;
   planVersionId: string;
   userId: string;
+  planCreatedAt: string;
+  planStartDate?: string | null;
 };
